@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مراقب الكهرباء الذكي</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0f1e;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --accent2: #0099bb;
+    --green: #00e676;
+    --yellow: #ffd740;
+    --red: #ff3d71;
+    --text: #e8f4ff;
+    --text-muted: #7a92b0;
+    --font: 'Cairo', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* animated background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── SIDEBAR ─── */
+  .sidebar {
+    position: fixed;
+    right: 0; top: 0; bottom: 0;
+    width: 240px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    transition: transform .3s ease;
+  }
+
+  .logo {
+    padding: 28px 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--accent), #006680);
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    box-shadow: 0 0 20px rgba(0,212,255,0.3);
+  }
+
+  .logo h1 { font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--text); }
+  .logo span { font-size: 11px; color: var(--accent); font-weight: 400; }
+
+  nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    transition: all .2s;
+    border: 1px solid transparent;
+    position: relative;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active {
+    background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,212,255,0.05));
+    color: var(--accent);
+    border-color: rgba(0,212,255,0.2);
+  }
+  .nav-item .icon { font-size: 18px; min-width: 20px; text-align: center; }
+
+  .nav-badge {
+    margin-right: auto;
+    background: var(--red);
+    color: white;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
+
+  .status-bar {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ─── MAIN ─── */
+  .main {
+    margin-right: 240px;
+    padding: 28px;
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+  }
+
+  .page { display: none; animation: fadeIn .3s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ─── PAGE HEADER ─── */
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .page-title { font-size: 24px; font-weight: 900; }
+  .page-title span { color: var(--accent); }
+
+  .header-time {
+    font-size: 13px;
+    color: var(--text-muted);
+    background: var(--surface);
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+
+  /* ─── GRID ─── */
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+  /* ─── CARDS ─── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .card:hover { border-color: rgba(0,212,255,0.3); box-shadow: 0 4px 30px rgba(0,212,255,0.05); }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: .04;
+    transform: translate(30%, -30%);
+  }
+
+  /* ─── METRIC CARDS ─── */
+  .metric-card .label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .metric-card .value {
+    font-size: 36px;
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .metric-card .unit { font-size: 16px; font-weight: 400; color: var(--text-muted); }
+  .metric-card .change {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .change.up { color: var(--red); }
+  .change.down { color: var(--green); }
+
+  .metric-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 12px;
+    overflow: hidden;
+  }
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s ease;
+  }
+
+  /* power status card */
+  .power-status-card {
+    grid-column: span 2;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .power-ring {
+    position: relative;
+    width: 80px; height: 80px;
+    flex-shrink: 0;
+  }
+  .power-ring svg { transform: rotate(-90deg); }
+  .power-ring-label {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* ─── CHART CARDS ─── */
+  .chart-card { padding: 24px; }
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .chart-title { font-size: 15px; font-weight: 700; }
+  .chart-tabs { display: flex; gap: 4px; }
+  .chart-tab {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    background: transparent;
+    font-family: var(--font);
+    transition: all .2s;
+  }
+  .chart-tab.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+  /* ─── ALERTS ─── */
+  .alert-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    border: 1px solid transparent;
+    animation: slideIn .3s ease;
+  }
+  @keyframes slideIn { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+  .alert-item.danger { background: rgba(255,61,113,0.08); border-color: rgba(255,61,113,0.2); }
+  .alert-item.warning { background: rgba(255,215,64,0.08); border-color: rgba(255,215,64,0.2); }
+  .alert-item.info { background: rgba(0,212,255,0.08); border-color: rgba(0,212,255,0.2); }
+  .alert-item.success { background: rgba(0,230,118,0.08); border-color: rgba(0,230,118,0.2); }
+
+  .alert-icon { font-size: 22px; }
+  .alert-content .title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+  .alert-content .desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .alert-time { margin-right: auto; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+  /* ─── DEVICES ─── */
+  .device-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 12px;
+    background: var(--surface2);
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    transition: all .2s;
+  }
+  .device-item:hover { border-color: rgba(0,212,255,0.2); }
+  .device-icon {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .device-name { font-size: 14px; font-weight: 700; }
+  .device-watt { font-size: 12px; color: var(--text-muted); }
+  .device-status {
+    margin-right: auto;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .device-status.on { background: rgba(0,230,118,0.15); color: var(--green); }
+  .device-status.off { background: rgba(122,146,176,0.1); color: var(--text-muted); }
+  .device-bar { flex: 1; max-width: 100px; }
+
+  /* ─── SETTINGS ─── */
+  .settings-group { margin-bottom: 28px; }
+  .settings-group-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(30,45,69,0.5);
+  }
+  .setting-label { font-size: 14px; font-weight: 600; }
+  .setting-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .setting-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--font);
+    width: 120px;
+    text-align: center;
+    transition: border-color .2s;
+  }
+  .setting-input:focus { outline: none; border-color: var(--accent); }
+  .toggle {
+    width: 44px; height: 24px;
+    background: var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: background .2s;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: white;
+    top: 3px; right: 3px;
+    transition: transform .2s;
+  }
+  .toggle.on::after { transform: translateX(-20px); }
+
+  /* ─── HISTORY ─── */
+  .history-table { width: 100%; border-collapse: collapse; }
+  .history-table th {
+    text-align: right;
+    padding: 10px 14px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .history-table td {
+    padding: 12px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(30,45,69,0.5);
+  }
+  .history-table tr:hover td { background: rgba(0,212,255,0.03); }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .badge.normal { background: rgba(0,230,118,0.15); color: var(--green); }
+  .badge.high { background: rgba(255,215,64,0.15); color: var(--yellow); }
+  .badge.critical { background: rgba(255,61,113,0.15); color: var(--red); }
+  .badge.outage { background: rgba(122,146,176,0.15); color: var(--text-muted); }
+
+  /* ─── SAVE BTN ─── */
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #000;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: opacity .2s, transform .1s;
+  }
+  .btn-primary:hover { opacity: .9; }
+  .btn-primary:active { transform: scale(.98); }
+
+  /* ─── AI INSIGHT ─── */
+  .ai-card {
+    background: linear-gradient(135deg, rgba(0,212,255,0.08), rgba(0,150,180,0.04));
+    border: 1px solid rgba(0,212,255,0.25);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .ai-badge {
+    background: var(--accent);
+    color: #000;
+    font-size: 10px;
+    font-weight: 900;
+    padding: 3px 8px;
+    border-radius: 6px;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .ai-text { font-size: 13px; line-height: 1.7; color: var(--text); }
+  .ai-text strong { color: var(--accent); }
+
+  /* ─── MOBILE TOGGLE ─── */
+  .menu-toggle {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    z-index: 200;
+    box-shadow: 0 4px 20px rgba(0,212,255,0.4);
+  }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 1100px) {
+    .grid-4 { grid-template-columns: 1fr 1fr; }
+    .power-status-card { grid-column: span 1; }
+  }
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(100%); }
+    .sidebar.open { transform: translateX(0); }
+    .main { margin-right: 0; padding: 16px; }
+    .grid-4, .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .power-status-card { grid-column: span 1; }
+    .menu-toggle { display: flex; align-items: center; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <h1>مراقب الكهرباء</h1>
+      <span>الذكي AI-Powered</span>
+    </div>
+  </div>
+
+  <nav>
+    <div class="nav-item active" onclick="navigate('dashboard', this)">
+      <span class="icon">📊</span> لوحة التحكم
+    </div>
+    <div class="nav-item" onclick="navigate('charts', this)">
+      <span class="icon">📈</span> الرسوم البيانية
+    </div>
+    <div class="nav-item" onclick="navigate('alerts', this)">
+      <span class="icon">🔔</span> التنبيهات
+      <span class="nav-badge" id="alertBadge">3</span>
+    </div>
+    <div class="nav-item" onclick="navigate('devices', this)">
+      <span class="icon">🏠</span> الأجهزة
+    </div>
+    <div class="nav-item" onclick="navigate('history', this)">
+      <span class="icon">📅</span> السجل
+    </div>
+    <div class="nav-item" onclick="navigate('settings', this)">
+      <span class="icon">⚙️</span> الإعدادات
+    </div>
+  </nav>
+
+  <div class="status-bar">
+    <div class="status-dot" id="connDot"></div>
+    <span id="connLabel">متصل بـ ESP32</span>
+  </div>
+</aside>
+
+<!-- MOBILE TOGGLE -->
+<button class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- ═══ DASHBOARD ═══ -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <div class="page-title">لوحة <span>التحكم</span></div>
+      <div class="header-time" id="clock">--:--:--</div>
+    </div>
+
+    <!-- AI Insight -->
+    <div class="ai-card">
+      <div class="ai-badge">AI</div>
+      <div class="ai-text" id="aiInsight">جارٍ تحليل أنماط الاستهلاك...</div>
+    </div>
+
+    <!-- Metric Cards -->
+    <div class="grid-4">
+      <div class="card metric-card">
+        <div class="label">⚡ الجهد الكهربي</div>
+        <div class="value" style="color:#00d4ff"><span id="voltage">220</span><span class="unit"> V</span></div>
+        <div class="change" id="voltageChange">— طبيعي</div>
+        <div class="metric-bar"><div class="metric-bar-fill" id="voltageBar" style="width:73%;background:#00d4ff"></div></div>
+      </div>
+
+      <div class="card metric-card">
+        <div class="label">🔌 التيار</div>
+        <div class="value" style="color:#00e676"><span id="current">5.2</span><span class="unit"> A</span></div>
+        <div class="change" id="currentChange">— عادي</div>
+        <div class="metric-bar"><div class="metric-bar-fill" id="currentBar" style="width:40%;background:#00e676"></div></div>
+      </div>
+
+      <div class="card metric-card">
+        <div class="label">💡 الطاقة اللحظية</div>
+        <div class="value" style="color:#ffd740"><span id="power">1144</span><span class="unit"> W</span></div>
+        <div class="change up" id="powerChange">▲ 12% عن الأمس</div>
+        <div class="metric-bar"><div class="metric-bar-fill" id="powerBar" style="width:57%;background:#ffd740"></div></div>
+      </div>
+
+      <div class="card metric-card">
+        <div class="label">📦 الاستهلاك اليومي</div>
+        <div class="value" style="color:#c084fc"><span id="kwh">8.7</span><span class="unit"> kWh</span></div>
+        <div class="change down">▼ وفّرت 5% عن أمس</div>
+        <div class="metric-bar"><div class="metric-bar-fill" style="width:58%;background:#c084fc"></div></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Power Status -->
+      <div class="card power-status-card">
+        <div class="power-ring">
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="32" fill="none" stroke="#1e2d45" stroke-width="8"/>
+            <circle cx="40" cy="40" r="32" fill="none" stroke="#00d4ff" stroke-width="8"
+              stroke-dasharray="201" stroke-dashoffset="50" stroke-linecap="round"
+              style="transition:stroke-dashoffset 1s ease" id="ringCircle"/>
+          </svg>
+          <div class="power-ring-label" id="ringPct">75%</div>
+        </div>
+        <div>
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">حالة الكهرباء</div>
+          <div id="powerStatusText" style="font-size:22px;font-weight:900;color:var(--green)">🟢 متصل</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:6px">مدة الاتصال: <span id="uptime">3 ساعات 22 دقيقة</span></div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">المشتركين في المنزل: <span style="color:var(--text)" id="peopleCount">4 أفراد</span></div>
+        </div>
+      </div>
+
+      <!-- Season Analysis -->
+      <div class="card">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;font-weight:700">🌡️ تحليل الاستهلاك الموسمي</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+              <span>الصيف (متوقع)</span><span style="color:var(--red)">14.2 kWh</span>
+            </div>
+            <div class="metric-bar"><div class="metric-bar-fill" style="width:89%;background:var(--red)"></div></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+              <span>الحالي</span><span style="color:var(--yellow)">8.7 kWh</span>
+            </div>
+            <div class="metric-bar"><div class="metric-bar-fill" style="width:54%;background:var(--yellow)"></div></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+              <span>الشتاء (متوقع)</span><span style="color:var(--accent)">6.1 kWh</span>
+            </div>
+            <div class="metric-bar"><div class="metric-bar-fill" style="width:38%;background:var(--accent)"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Small chart -->
+    <div class="card chart-card">
+      <div class="chart-header">
+        <div class="chart-title">📊 استهلاك اليوم (kWh/ساعة)</div>
+      </div>
+      <canvas id="miniChart" height="80"></canvas>
+    </div>
+  </div>
+
+  <!-- ═══ CHARTS ═══ -->
+  <div class="page" id="page-charts">
+    <div class="page-header">
+      <div class="page-title">الرسوم <span>البيانية</span></div>
+      <div class="chart-tabs">
+        <button class="chart-tab active" onclick="switchChartPeriod('day',this)">اليوم</button>
+        <button class="chart-tab" onclick="switchChartPeriod('week',this)">الأسبوع</button>
+        <button class="chart-tab" onclick="switchChartPeriod('month',this)">الشهر</button>
+      </div>
+    </div>
+
+    <div class="card chart-card" style="margin-bottom:20px">
+      <div class="chart-title" style="margin-bottom:16px">⚡ استهلاك الطاقة</div>
+      <canvas id="mainChart" height="120"></canvas>
+    </div>
+
+    <div class="grid-2">
+      <div class="card chart-card">
+        <div class="chart-title" style="margin-bottom:16px">🔌 التيار والجهد</div>
+        <canvas id="viChart" height="140"></canvas>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-title" style="margin-bottom:16px">🥧 توزيع الاستهلاك</div>
+        <canvas id="pieChart" height="140"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ ALERTS ═══ -->
+  <div class="page" id="page-alerts">
+    <div class="page-header">
+      <div class="page-title">🔔 <span>التنبيهات</span></div>
+      <button class="btn-primary" onclick="clearAlerts()">مسح الكل</button>
+    </div>
+    <div id="alertsList"></div>
+  </div>
+
+  <!-- ═══ DEVICES ═══ -->
+  <div class="page" id="page-devices">
+    <div class="page-header">
+      <div class="page-title">🏠 <span>الأجهزة</span></div>
+    </div>
+    <div class="ai-card">
+      <div class="ai-badge">AI</div>
+      <div class="ai-text">تم رصد <strong>5 أجهزة</strong> نشطة بناءً على تحليل بصمة الاستهلاك. الثلاجة تعمل بكفاءة طبيعية. التكييف يستهلك <strong>45%</strong> من إجمالي الطاقة — فكّر في رفع درجة الحرارة درجة واحدة لتوفير 8% من الفاتورة.</div>
+    </div>
+    <div id="devicesList"></div>
+  </div>
+
+  <!-- ═══ HISTORY ═══ -->
+  <div class="page" id="page-history">
+    <div class="page-header">
+      <div class="page-title">📅 <span>السجل</span></div>
+    </div>
+    <div class="card" style="overflow:auto">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>التاريخ والوقت</th>
+            <th>الاستهلاك</th>
+            <th>متوسط التيار</th>
+            <th>الحالة</th>
+            <th>ملاحظة</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ SETTINGS ═══ -->
+  <div class="page" id="page-settings">
+    <div class="page-header">
+      <div class="page-title">⚙️ <span>الإعدادات</span></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="settings-group">
+          <div class="settings-group-title">إعدادات المنزل</div>
+          <div class="setting-row">
+            <div><div class="setting-label">عدد أفراد المنزل</div><div class="setting-sub">يؤثر على تحليل الاستهلاك</div></div>
+            <input class="setting-input" type="number" value="4" id="settPeople" min="1" max="20">
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">عدد الأجهزة</div><div class="setting-sub">الأجهزة الكهربائية الأساسية</div></div>
+            <input class="setting-input" type="number" value="8" id="settDevices" min="1" max="50">
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">نوع العداد</div><div class="setting-sub">كارت / عادي</div></div>
+            <select class="setting-input" id="settMeter" style="width:auto">
+              <option>كارت (Prepaid)</option>
+              <option>عادي (Postpaid)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="settings-group">
+          <div class="settings-group-title">حدود التنبيه</div>
+          <div class="setting-row">
+            <div><div class="setting-label">الحد الأقصى للطاقة</div><div class="setting-sub">تنبيه عند التجاوز (W)</div></div>
+            <input class="setting-input" type="number" value="3000" id="settMaxPower">
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">الحد الأدنى للجهد</div><div class="setting-sub">تنبيه عند الانخفاض (V)</div></div>
+            <input class="setting-input" type="number" value="190" id="settMinVoltage">
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">تنبيه انقطاع الكهرباء</div></div>
+            <div class="toggle on" id="toggleOutage" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">تنبيه السرقة</div><div class="setting-sub">رصد الاستهلاك غير المبرر</div></div>
+            <div class="toggle on" id="toggleTheft" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">إشعارات الموبايل</div></div>
+            <div class="toggle on" id="togglePush" onclick="this.classList.toggle('on')"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:0">
+      <div class="settings-group">
+        <div class="settings-group-title">إعدادات ESP32</div>
+        <div class="grid-3">
+          <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+            <div class="setting-label">عنوان IP</div>
+            <input class="setting-input" type="text" value="192.168.1.100" style="width:100%">
+          </div>
+          <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+            <div class="setting-label">المنفذ (Port)</div>
+            <input class="setting-input" type="number" value="80" style="width:100%">
+          </div>
+          <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+            <div class="setting-label">معدل التحديث</div>
+            <input class="setting-input" type="number" value="2" style="width:100%">
+          </div>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="saveSettings()">💾 حفظ الإعدادات</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─── DATA & STATE ───
+let currentPage = 'dashboard';
+let liveData = { voltage: 220, current: 5.2, power: 1144, kwh: 8.7 };
+let alerts = [
+  { type:'danger', icon:'🔴', title:'انقطاع كهرباء محتمل', desc:'انخفاض مفاجئ في التيار إلى 0.1A — احتمال انقطاع الكهرباء.', time:'منذ 5 دقائق' },
+  { type:'warning', icon:'⚠️', title:'استهلاك غير طبيعي', desc:'استهلاك أعلى بـ 34% من متوسطك في هذا الوقت من اليوم.', time:'منذ 23 دقيقة' },
+  { type:'warning', icon:'🔍', title:'رصد سرقة كهرباء محتملة', desc:'فرق في الاستهلاك بين العداد والقراءة الداخلية — يُنصح بالتواصل مع شركة الكهرباء.', time:'منذ 1 ساعة' },
+  { type:'success', icon:'✅', title:'توفير في الطاقة', desc:'وفّرت 5% اليوم مقارنة بأمس في نفس الوقت.', time:'منذ 2 ساعة' },
+  { type:'info', icon:'ℹ️', title:'تحليل موسمي', desc:'دخلنا فصل الربيع — استهلاكك المتوقع أقل 30% من الصيف.', time:'منذ 5 ساعات' },
+];
+
+let devices = [
+  { icon:'❄️', name:'التكييف', watt:1800, on:true },
+  { icon:'🧊', name:'الثلاجة', watt:150, on:true },
+  { icon:'📺', name:'التلفزيون', watt:120, on:true },
+  { icon:'💡', name:'الإضاءة', watt:80, on:true },
+  { icon:'🫧', name:'الغسالة', watt:500, on:false },
+  { icon:'🌡️', name:'السخان', watt:1500, on:false },
+  { icon:'🖥️', name:'الكمبيوتر', watt:300, on:true },
+  { icon:'📡', name:'الراوتر', watt:15, on:true },
+];
+
+let historyData = [
+  { time:'07 أبريل 2026 - 10:00 م', kwh:'8.7', current:'5.2A', status:'normal', note:'استهلاك طبيعي' },
+  { time:'07 أبريل 2026 - 06:00 م', kwh:'12.1', current:'9.1A', status:'high', note:'ساعة ذروة' },
+  { time:'07 أبريل 2026 - 02:00 م', kwh:'3.2', current:'2.1A', status:'normal', note:'فترة هدوء' },
+  { time:'06 أبريل 2026 - 08:00 م', kwh:'0.0', current:'0.0A', status:'outage', note:'انقطاع كهرباء لمدة 45 دقيقة' },
+  { time:'06 أبريل 2026 - 04:00 م', kwh:'15.4', current:'11.2A', status:'critical', note:'استهلاك مرتفع جداً — تحقق' },
+  { time:'05 أبريل 2026 - 10:00 م', kwh:'9.1', current:'5.8A', status:'normal', note:'استهلاك طبيعي' },
+  { time:'05 أبريل 2026 - 06:00 م', kwh:'11.3', current:'8.7A', status:'high', note:'ساعة ذروة' },
+];
+
+const aiInsights = [
+  'الاستهلاك <strong>طبيعي</strong> لـ 4 أفراد. التكييف يستهلك 45% من الطاقة الكلية — فكّر في رفع درجة الحرارة درجة واحدة لتوفير 8%.',
+  'لاحظت نمطاً: الاستهلاك يرتفع بين 6–9 مساءً. هذا هو وقت الذروة. حاول تأجيل تشغيل الغسالة لما بعد 10 مساءً.',
+  'مقارنة بالجيران (4 أفراد): استهلاكك <strong>أقل بـ 12%</strong> — أداء ممتاز! استمر.',
+  'لا يوجد أحد في المنزل منذ 2 ساعة — الأجهزة المشغّلة لا تزال تستهلك 340W. هل تريد إيقافها؟',
+];
+
+// ─── CLOCK ───
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('ar-EG') + ' — ' + now.toLocaleDateString('ar-EG');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─── NAVIGATION ───
+function navigate(page, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  el.classList.add('active');
+  currentPage = page;
+  if (page === 'alerts') renderAlerts();
+  if (page === 'devices') renderDevices();
+  if (page === 'history') renderHistory();
+  if (page === 'charts') setTimeout(initCharts, 50);
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+// ─── LIVE DATA SIMULATION ───
+function updateLiveData() {
+  liveData.voltage = (220 + (Math.random()-0.5)*10).toFixed(1);
+  liveData.current = (5 + Math.random()*3).toFixed(2);
+  liveData.power = Math.round(liveData.voltage * liveData.current);
+  liveData.kwh = (liveData.kwh + liveData.power/3600000*2).toFixed(2);
+
+  document.getElementById('voltage').textContent = liveData.voltage;
+  document.getElementById('current').textContent = liveData.current;
+  document.getElementById('power').textContent = liveData.power;
+  document.getElementById('kwh').textContent = liveData.kwh;
+
+  const vPct = ((liveData.voltage/300)*100).toFixed(0);
+  const cPct = ((liveData.current/15)*100).toFixed(0);
+  const pPct = ((liveData.power/5000)*100).toFixed(0);
+  document.getElementById('voltageBar').style.width = vPct+'%';
+  document.getElementById('currentBar').style.width = cPct+'%';
+  document.getElementById('powerBar').style.width = pPct+'%';
+
+  // voltage status
+  const v = parseFloat(liveData.voltage);
+  let vStatus = '— طبيعي';
+  let vColor = 'var(--green)';
+  if (v < 190) { vStatus = '⚠️ منخفض'; vColor = 'var(--red)'; }
+  else if (v > 250) { vStatus = '⚠️ مرتفع'; vColor = 'var(--red)'; }
+  document.getElementById('voltageChange').textContent = vStatus;
+  document.getElementById('voltageChange').style.color = vColor;
+
+  // ring
+  const offset = 201 - (201 * pPct/100);
+  document.getElementById('ringCircle').style.strokeDashoffset = offset;
+  document.getElementById('ringPct').textContent = pPct+'%';
+
+  // AI insight rotation
+  const idx = Math.floor(Date.now()/15000) % aiInsights.length;
+  document.getElementById('aiInsight').innerHTML = aiInsights[idx];
+
+  // mini chart update
+  if (miniChartInst) {
+    miniChartInst.data.datasets[0].data.push(parseFloat((liveData.power/1000).toFixed(2)));
+    miniChartInst.data.labels.push(new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}));
+    if (miniChartInst.data.labels.length > 20) {
+      miniChartInst.data.labels.shift();
+      miniChartInst.data.datasets[0].data.shift();
+    }
+    miniChartInst.update('none');
+  }
+}
+
+setInterval(updateLiveData, 2000);
+
+// ─── ALERTS ───
+function renderAlerts() {
+  const list = document.getElementById('alertsList');
+  list.innerHTML = alerts.map(a => `
+    <div class="alert-item ${a.type}">
+      <div class="alert-icon">${a.icon}</div>
+      <div class="alert-content">
+        <div class="title">${a.title}</div>
+        <div class="desc">${a.desc}</div>
+      </div>
+      <div class="alert-time">${a.time}</div>
+    </div>
+  `).join('');
+}
+function clearAlerts() {
+  alerts = [];
+  renderAlerts();
+  document.getElementById('alertBadge').textContent = '0';
+}
+
+// ─── DEVICES ───
+function renderDevices() {
+  const total = devices.filter(d=>d.on).reduce((s,d)=>s+d.watt, 0);
+  document.getElementById('devicesList').innerHTML = devices.map((d,i) => `
+    <div class="device-item">
+      <div class="device-icon">${d.icon}</div>
+      <div>
+        <div class="device-name">${d.name}</div>
+        <div class="device-watt">${d.watt}W</div>
+      </div>
+      <div class="device-bar">
+        <div class="metric-bar" style="margin-top:0">
+          <div class="metric-bar-fill" style="width:${d.on?Math.round(d.watt/total*100):0}%;background:var(--accent)"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:3px">${d.on?Math.round(d.watt/total*100)+'% من الكل':'متوقف'}</div>
+      </div>
+      <div class="device-status ${d.on?'on':'off'}">${d.on?'🟢 يعمل':'⭕ متوقف'}</div>
+    </div>
+  `).join('');
+}
+
+// ─── HISTORY ───
+function renderHistory() {
+  const statusMap = { normal:'<span class="badge normal">طبيعي</span>', high:'<span class="badge high">مرتفع</span>', critical:'<span class="badge critical">حرج</span>', outage:'<span class="badge outage">انقطاع</span>' };
+  document.getElementById('historyBody').innerHTML = historyData.map(h => `
+    <tr>
+      <td>${h.time}</td>
+      <td>${h.kwh} kWh</td>
+      <td>${h.current}</td>
+      <td>${statusMap[h.status]}</td>
+      <td style="color:var(--text-muted)">${h.note}</td>
+    </tr>
+  `).join('');
+}
+
+// ─── CHARTS ───
+Chart.defaults.color = '#7a92b0';
+Chart.defaults.font.family = "'Cairo', sans-serif";
+
+let miniChartInst, mainChartInst, viChartInst, pieChartInst;
+
+function genHours() {
+  return Array.from({length:24}, (_,i)=> i+':00');
+}
+function genDay() {
+  return Array.from({length:24}, () => +(Math.random()*3+0.5).toFixed(2));
+}
+function genWeek() {
+  return ['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'].map(() => +(Math.random()*20+5).toFixed(1));
+}
+function genMonth() {
+  return Array.from({length:30}, (_,i)=> (i+1)+'').map(() => +(Math.random()*25+8).toFixed(1));
+}
+
+function initMiniChart() {
+  const ctx = document.getElementById('miniChart').getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,0,120);
+  grad.addColorStop(0,'rgba(0,212,255,0.3)');
+  grad.addColorStop(1,'rgba(0,212,255,0)');
+  miniChartInst = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: genHours().slice(0,12),
+      datasets:[{ data: genDay().slice(0,12), borderColor:'#00d4ff', backgroundColor:grad, tension:.4, fill:true, pointRadius:2, borderWidth:2 }]
+    },
+    options:{ plugins:{legend:{display:false}}, scales:{ x:{grid:{color:'rgba(255,255,255,0.03)'}}, y:{grid:{color:'rgba(255,255,255,0.03)'}, ticks:{callback:v=>v+'kW'}} }, animation:false }
+  });
+}
+
+let currentPeriod = 'day';
+
+function initCharts() {
+  if (mainChartInst) mainChartInst.destroy();
+  if (viChartInst) viChartInst.destroy();
+  if (pieChartInst) pieChartInst.destroy();
+
+  const isDay = currentPeriod === 'day';
+  const isWeek = currentPeriod === 'week';
+  const labels = isDay ? genHours() : isWeek ? ['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'] : Array.from({length:30},(_,i)=>(i+1)+'');
+  const data1 = isDay ? genDay() : isWeek ? genWeek() : genMonth();
+  const data2 = data1.map(v => +(v*0.7+Math.random()).toFixed(2));
+
+  const ctx1 = document.getElementById('mainChart').getContext('2d');
+  const g1 = ctx1.createLinearGradient(0,0,0,300);
+  g1.addColorStop(0,'rgba(0,212,255,0.25)'); g1.addColorStop(1,'rgba(0,212,255,0)');
+  mainChartInst = new Chart(ctx1, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'الاستهلاك الفعلي (kWh)', data:data1, backgroundColor:'rgba(0,212,255,0.6)', borderRadius:6, borderSkipped:false },
+        { label:'المتوسط المتوقع', data:data2, type:'line', borderColor:'#ffd740', backgroundColor:'transparent', tension:.4, pointRadius:0, borderWidth:2 }
+      ]
+    },
+    options:{ plugins:{legend:{labels:{color:'#7a92b0',font:{family:'Cairo'}}}}, scales:{ x:{grid:{color:'rgba(255,255,255,0.03)'}}, y:{grid:{color:'rgba(255,255,255,0.03)'}} } }
+  });
+
+  const ctx2 = document.getElementById('viChart').getContext('2d');
+  viChartInst = new Chart(ctx2, {
+    type:'line',
+    data:{
+      labels: genHours(),
+      datasets:[
+        { label:'الجهد (V)', data: Array.from({length:24},()=>+(215+Math.random()*15).toFixed(1)), borderColor:'#00d4ff', tension:.4, yAxisID:'y', fill:false, pointRadius:0, borderWidth:2 },
+        { label:'التيار (A)', data: Array.from({length:24},()=>+(2+Math.random()*10).toFixed(2)), borderColor:'#00e676', tension:.4, yAxisID:'y1', fill:false, pointRadius:0, borderWidth:2 }
+      ]
+    },
+    options:{
+      plugins:{legend:{labels:{color:'#7a92b0',font:{family:'Cairo'}}}},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.03)'}},
+        y:{grid:{color:'rgba(255,255,255,0.03)'},position:'right',title:{display:true,text:'V',color:'#00d4ff'}},
+        y1:{grid:{display:false},position:'left',title:{display:true,text:'A',color:'#00e676'}}
+      }
+    }
+  });
+
+  const ctx3 = document.getElementById('pieChart').getContext('2d');
+  pieChartInst = new Chart(ctx3, {
+    type:'doughnut',
+    data:{
+      labels:['تكييف','ثلاجة','تلفزيون','إضاءة','أخرى'],
+      datasets:[{ data:[45,12,8,6,29], backgroundColor:['#00d4ff','#00e676','#ffd740','#c084fc','#1e2d45'], borderWidth:0, hoverOffset:8 }]
+    },
+    options:{ plugins:{legend:{position:'bottom',labels:{color:'#7a92b0',font:{family:'Cairo'},padding:16}}} }
+  });
+}
+
+function switchChartPeriod(period, el) {
+  document.querySelectorAll('.chart-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  currentPeriod = period;
+  initCharts();
+}
+
+// ─── SETTINGS ───
+function saveSettings() {
+  const p = document.getElementById('settPeople').value;
+  document.getElementById('peopleCount').textContent = p + ' أفراد';
+  const btn = document.querySelector('.btn-primary');
+  btn.textContent = '✅ تم الحفظ!';
+  setTimeout(() => btn.textContent = '💾 حفظ الإعدادات', 2000);
+}
+
+// ─── INIT ───
+initMiniChart();
+renderAlerts();
+
+// Uptime counter
+let uptimeSeconds = 3*3600+22*60;
+setInterval(() => {
+  uptimeSeconds++;
+  const h = Math.floor(uptimeSeconds/3600);
+  const m = Math.floor((uptimeSeconds%3600)/60);
+  document.getElementById('uptime').textContent = h + ' ساعات ' + m + ' دقيقة';
+}, 1000);
+</script>
+</body>
+</html>
